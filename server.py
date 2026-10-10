@@ -26,7 +26,10 @@ def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
 
     # 2. Graphify Scan
     scan_cmd = f"graphify scan {repo_path} --output {graph_output}"
-    subprocess.run(scan_cmd, shell=True, check=True)
+    scan_process = subprocess.run(scan_cmd, shell=True, capture_output=True, text=True)
+
+    if scan_process.returncode != 0:
+        return f"Git pull berhasil, tapi proses scan gagal.\n\nPesan Error Asli:\n{scan_process.stderr}\n\nLog Output:\n{scan_process.stdout}"
 
     return f"Sukses! Repositori '{repo_name}' berhasil disinkronkan dan dianalisa. File graph tersimpan di {graph_output}."
 
