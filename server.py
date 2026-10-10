@@ -1,0 +1,87 @@
+import os
+import subprocess
+import shutil
+from urllib.parse import urlparse
+from fastmcp import FastMCP
+
+mcp = FastMCP("Graphify Hub")
+
+REPOS_DIR = "/data/repos"
+GRAPHS_DIR = "/data/graphs"
+
+@mcp.tool()
+def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
+    """Clone atau pull repo GitHub terbaru, lalu jalankan analisa Graphify."""
+    repo_name = os.path.splitext(os.path.basename(urlparse(repo_url).path))[0]
+    repo_path = os.path.join(REPOS_DIR, repo_name)
+    graph_output = os.path.join(GRAPHS_DIR, f"{repo_name}.json")
+
+    # 1. Git Clone atau Pull
+    if not os.path.exists(repo_path):
+        clone_cmd = f"git clone --depth 1 -b {branch} {repo_url} {repo_path}"
+        subprocess.run(clone_cmd, shell=True, check=True)
+    else:
+        pull_cmd = f"cd {repo_path} && git fetch && git checkout {branch} && git pull"
+        subprocess.run(pull_cmd, shell=True, check=True)
+
+    # 2. Graphify Scan
+    scan_cmd = f"graphify scan {repo_path} --output {graph_output}"
+    subprocess.run(scan_cmd, shell=True, check=True)
+
+    return f"Sukses! Repositori '{repo_name}' berhasil disinkronkan dan dianalisa. File graph tersimpan di {graph_output}."
+
+@mcp.tool()
+def query_project_graph(project_name: str, query_type: str, target_symbol: str) -> str:
+    """Membaca dependensi, fungsi, atau arsitektur dari repositori yang sudah di-scan."""
+    graph_path = os.path.join(GRAPHS_DIR, f"{project_name}.json")
+    if not os.path.exists(graph_path):
+        return f"Error: Project '{project_name}' belum pernah di-scan. Jalankan sync_and_scan_repository dulu."
+
+    query_cmd = f"graphify query {graph_path} --type {query_type} --symbol {target_symbol}"
+    res = subprocess.run(query_cmd, shell=True, capture_output=True, text=True)
+    return res.stdout if res.returncode == 0 else f"Error: {res.stderr}"
+
+if __name__ == "__main__":
+    mcp.run(transport="sse", host="0.0.0.0", port=8000)
+
+@mcp.tool()
+def list_projects() -> str:
+    """Melihat daftar seluruh project yang sudah pernah di-scan dan tersimpan di database graph."""
+    if not os.path.exists(GRAPHS_DIR):
+        return "Belum ada project yang tersimpan."
+    
+    files = [f for f in os.listdir(GRAPHS_DIR) if f.endswith(".json")]
+    if not files:
+        return "Belum ada project yang tersimpan."
+    
+    project_list = []
+    for f in sorted(files):
+        project_name = f.replace(".json", "")
+        # Hitung ukuran file graph untuk gambaran kompleksitas
+        size_kb = os.path.getsize(os.path.join(GRAPHS_DIR, f)) / 1024
+        project_list.append(f"- {project_name} ({size_kb:.1f} KB)")
+        
+    return "Project yang tersedia:\n" + "\n".join(project_list)
+
+@mcp.tool()
+def delete_project(project_name: str) -> str:
+    """Menghapus data project (baik file graph maupun repositori lokalnya) agar hemat storage."""
+    graph_path = os.path.join(GRAPHS_DIR, f"{project_name}.json")
+    repo_path = os.path.join(REPOS_DIR, project_name)
+
+    deleted_items = []
+
+    # Hapus file graph.json
+    if os.path.exists(graph_path):
+        os.remove(graph_path)
+        deleted_items.append("file graph")
+
+    # Hapus folder repositori yang di-clone
+    if os.path.exists(repo_path):
+        shutil.rmtree(repo_path)
+        deleted_items.append("source code repo")
+
+    if not deleted_items:
+        return f"Project '{project_name}' tidak ditemukan di sistem."
+
+    return f"Project '{project_name}' berhasil dihapus ({', '.join(deleted_items)})."
