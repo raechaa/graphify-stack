@@ -15,6 +15,7 @@ def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
     repo_name = os.path.splitext(os.path.basename(urlparse(repo_url).path))[0]
     repo_path = os.path.join(REPOS_DIR, repo_name)
     graph_output = os.path.join(GRAPHS_DIR, f"{repo_name}.json")
+    html_output = os.path.join(GRAPHS_DIR, f"{repo_name}.html")
 
     # 1. Git Clone atau Pull
     if not os.path.exists(repo_path):
@@ -25,7 +26,7 @@ def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
         subprocess.run(pull_cmd, shell=True, check=True)
 
     # 2. Graphify Scan
-    scan_cmd = f"graphify scan {repo_path} --output {graph_output}"
+    scan_cmd = f"graphify {repo_path} --graph {graph_output} --output {html_output}"
     scan_process = subprocess.run(scan_cmd, shell=True, capture_output=True, text=True)
 
     if scan_process.returncode != 0:
