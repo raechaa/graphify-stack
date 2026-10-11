@@ -1,6 +1,7 @@
 import os
 import subprocess
 import shutil
+import glob
 from urllib.parse import urlparse
 from fastmcp import FastMCP
 
@@ -56,35 +57,55 @@ def list_projects() -> str:
     if not os.path.exists(GRAPHS_DIR):
         return "Belum ada project yang tersimpan."
     
-    files = [f for f in os.listdir(GRAPHS_DIR) if f.endswith(".json")]
+    files = [os.path.basename(f) for f in glob.glob(os.path.join(GRAPHS_DIR, "**/*.json"), recursive=True)]
     if not files:
         return "Tidak terdeteksi JSON file(s)"
     
     project_list = []
-    for f in sorted(files):
-        project_name = f.replace(".json", "")
-        # Hitung ukuran file graph untuk gambaran kompleksitas
-        size_kb = os.path.getsize(os.path.join(GRAPHS_DIR, f)) / 1024
-        project_list.append(f"- {project_name} ({size_kb:.1f} KB)")
+    for root, dirs, filenames in os.walk(GRAPHS_DIR):
+        for f in filenames:
+            if f.endswith(".json"):
+                full_path = os.path.join(root, f)
+                relative_path = os.path.relpath(full_path, GRAPHS_DIR)
+                project_name = relative_path.replace(".json", "")
+                size_kb = os.path.getsize(full_path) / 1024
+                project_list.append(f"- {project_name} ({size_kb:.1f} KB)")
+    if not project_list:
+        return "Belum ada project yang tersimpan."
+        
+    project_list.sort()
         
     return "Project yang tersedia:\n" + "\n".join(project_list)
 
 @mcp.tool()
 def delete_project(project_name: str) -> str:
-    """Menghapus data project (baik file graph maupun repositori lokalnya) agar hemat storage."""
+    """Menghapus data project"""
+    
+    project_name = os.path.normpath(project_name)
+    
     graph_path = os.path.join(GRAPHS_DIR, f"{project_name}.json")
     repo_path = os.path.join(REPOS_DIR, project_name)
 
     deleted_items = []
 
-    # Hapus file graph.json
-    if os.path.exists(graph_path):
-        os.remove(graph_path)
-        deleted_items.append("file graph")
-
-    # Hapus folder repositori yang di-clone
-    if os.path.exists(repo_path):
-        shutil.rmtree(repo_path)
+    parts = project_name.split(os.sep)
+    
+    if len(parts) > 1:
+        target_root_folder = os.path.join(GRAPHS_DIR, parts[0])
+        
+        if os.path.exists(target_root_folder) and os.path.isdir(target_root_folder):
+            shutil.rmtree(target_root_folder)
+            deleted_items.append(f"folder graph '{parts[0]}' secara recursive")
+    else:
+        if os.path.exists(graph_path):
+            os.remove(graph_path)
+            deleted_items.append("file graph")
+            
+    repo_root_part = parts[0]
+    target_repo_path = os.path.join(REPOS_DIR, repo_root_part)
+    
+    if os.path.exists(target_repo_path):
+        shutil.rmtree(target_repo_path)
         deleted_items.append("source code repo")
 
     if not deleted_items:
