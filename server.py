@@ -53,29 +53,27 @@ if __name__ == "__main__":
 
 @mcp.tool()
 def list_projects() -> str:
-    """Melihat daftar seluruh project yang sudah pernah di-scan dan tersimpan di database graph."""
+    """Melihat daftar seluruh nama project"""
     if not os.path.exists(GRAPHS_DIR):
         return "Belum ada project yang tersimpan."
     
-    files = [os.path.basename(f) for f in glob.glob(os.path.join(GRAPHS_DIR, "**/*.json"), recursive=True)]
-    if not files:
-        return "Tidak terdeteksi JSON file(s)"
-    
     project_list = []
-    for root, dirs, filenames in os.walk(GRAPHS_DIR):
-        for f in filenames:
-            if f.endswith(".json"):
-                full_path = os.path.join(root, f)
-                relative_path = os.path.relpath(full_path, GRAPHS_DIR)
-                project_name = relative_path.replace(".json", "")
-                size_kb = os.path.getsize(full_path) / 1024
-                project_list.append(f"- {project_name} ({size_kb:.1f} KB)")
+    try:
+        with os.scandir(GRAPHS_DIR) as entries:
+            for entry in entries:
+                if entry.is_dir():
+                    project_name = entry.name
+                    project_list.append(f"- {project_name}")
+    except OSError as e:
+        return f"Gagal membaca direktori graph: {str(e)}"
+        
     if not project_list:
         return "Belum ada project yang tersimpan."
-        
+    
     project_list.sort()
-        
+    
     return "Project yang tersedia:\n" + "\n".join(project_list)
+
 
 @mcp.tool()
 def delete_project(project_name: str) -> str:
