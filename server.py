@@ -2,6 +2,7 @@ import os
 import subprocess
 import shutil
 import glob
+import base64
 import zipfile
 import io
 from urllib.parse import urlparse
@@ -104,7 +105,7 @@ def delete_project(project_name: str) -> str:
     
 
 @mcp.tool()
-def upload_and_scan_zip(project_name: str, zip_bytes: bytes) -> str:
+def upload_and_scan_zip(project_name: str, zip_base64: str) -> str:
     """Menerima upload manual file ZIP project"""
     
     project_name = os.path.basename(os.path.normpath(project_name))
@@ -123,6 +124,13 @@ def upload_and_scan_zip(project_name: str, zip_bytes: bytes) -> str:
     os.makedirs(repo_path, exist_ok=True)
     os.makedirs(graph_output, exist_ok=True)
 
+    try:
+        zip_data = base64.b64decode(zip_base64)
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zip_ref:
+            zip_ref.extractall(repo_path)
+    except Exception as e:
+        return f"Gagal mengekstrak: {str(e)}"
+        
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zip_ref:
             zip_ref.extractall(repo_path)
