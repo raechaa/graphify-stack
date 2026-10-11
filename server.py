@@ -2,6 +2,8 @@ import os
 import subprocess
 import shutil
 import glob
+import zipfile
+import io
 from urllib.parse import urlparse
 from fastmcp import FastMCP
 
@@ -99,6 +101,46 @@ def delete_project(project_name: str) -> str:
         return f"Project folder '{clean_project_name}' tidak ditemukan di sistem."
 
     return f"Sukses! Project '{clean_project_name}' berhasil dihapus sepenuhnya ({', '.join(deleted_items)})."
+    
+
+@mcp.tool()
+def upload_and_scan_zip(project_name: str, zip_bytes: bytes) -> str:
+    """Menerima upload manual file ZIP project"""
+    
+    project_name = os.path.basename(os.path.normpath(project_name))
+    
+    if not project_name or project_name in [".", ".."]:
+        return "Error: Nama project tidak valid."
+
+    repo_path = os.path.join(REPOS_DIR, project_name)
+    graph_output = os.path.join(GRAPHS_DIR, project_name)
+
+    if os.path.exists(repo_path):
+        shutil.rmtree(repo_path)
+    if os.path.exists(graph_output):
+        shutil.rmtree(graph_output)
+        
+    os.makedirs(repo_path, exist_ok=True)
+    os.makedirs(graph_output, exist_ok=True)
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zip_ref:
+            zip_ref.extractall(repo_path)
+    except zipfile.BadZipFile:
+        return "Error: File yang dikirimkan rusak atau bukan format ZIP yang valid."
+    except Exception as e:
+        return f"Gagal mengekstrak file ZIP: {str(e)}"
+
+    scan_cmd = f"graphify {repo_path} --output {graph_output}/graph.json"
+    scan_process = subprocess.run(scan_cmd, shell=True, capture_output=True, text=True)
+
+    html_cmd = f"graphify export html --graph {graph_output}/graph.json"
+    subprocess.run(html_cmd, shell=True)
+
+    if scan_process.returncode != 0:
+        return f"ZIP berhasil diekstrak, tetapi proses scan Graphify gagal.\n\nLog Error:\n{scan_process.stderr}"
+
+    return f"Sukses! Project ZIP '{project_name}' berhasil diekstrak dan dianalisa. Struktur folder terdeteksi dan file graph tersimpan di database."
 
 
 if __name__ == "__main__":
