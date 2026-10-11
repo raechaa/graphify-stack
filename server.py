@@ -77,36 +77,29 @@ def list_projects() -> str:
 
 @mcp.tool()
 def delete_project(project_name: str) -> str:
-    """Menghapus data project"""
+    """Menghapus seluruh folder project tepat di bawah GRAPHS_DIR dan REPOS_DIR 
+    berdasarkan nama folder yang dipilih dari list_projects."""
     
-    project_name = os.path.normpath(project_name)
-    
-    graph_path = os.path.join(GRAPHS_DIR, f"{project_name}.json")
-    repo_path = os.path.join(REPOS_DIR, project_name)
+    clean_project_name = os.path.basename(os.path.normpath(project_name))
+
+    if not clean_project_name or clean_project_name in [".", ".."]:
+        return "Error: Nama project tidak valid."
+
+    graph_folder_path = os.path.join(GRAPHS_DIR, clean_project_name)
+    repo_folder_path = os.path.join(REPOS_DIR, clean_project_name)
 
     deleted_items = []
 
-    parts = project_name.split(os.sep)
-    
-    if len(parts) > 1:
-        target_root_folder = os.path.join(GRAPHS_DIR, parts[0])
-        
-        if os.path.exists(target_root_folder) and os.path.isdir(target_root_folder):
-            shutil.rmtree(target_root_folder)
-            deleted_items.append(f"folder graph '{parts[0]}' secara recursive")
-    else:
-        if os.path.exists(graph_path):
-            os.remove(graph_path)
-            deleted_items.append("file graph")
-            
-    repo_root_part = parts[0]
-    target_repo_path = os.path.join(REPOS_DIR, repo_root_part)
-    
-    if os.path.exists(target_repo_path):
-        shutil.rmtree(target_repo_path)
+    if os.path.exists(graph_folder_path) and os.path.isdir(graph_folder_path):
+        shutil.rmtree(graph_folder_path)
+        deleted_items.append("folder data graph")
+
+    if os.path.exists(repo_folder_path) and os.path.isdir(repo_folder_path):
+        shutil.rmtree(repo_folder_path)
         deleted_items.append("source code repo")
 
     if not deleted_items:
-        return f"Project '{project_name}' tidak ditemukan di sistem."
+        return f"Project folder '{clean_project_name}' tidak ditemukan di sistem."
 
-    return f"Project '{project_name}' berhasil dihapus ({', '.join(deleted_items)})."
+    return f"Sukses! Project '{clean_project_name}' berhasil dihapus sepenuhnya ({', '.join(deleted_items)})."
+
