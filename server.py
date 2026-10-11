@@ -48,9 +48,6 @@ def query_project_graph(project_name: str, query_type: str, target_symbol: str) 
     res = subprocess.run(query_cmd, shell=True, capture_output=True, text=True)
     return res.stdout if res.returncode == 0 else f"Error: {res.stderr}"
 
-if __name__ == "__main__":
-    mcp.run(transport="sse", host="0.0.0.0", port=8000)
-
 @mcp.tool()
 def list_projects() -> str:
     """Melihat daftar seluruh nama project"""
@@ -103,3 +100,6 @@ def delete_project(project_name: str) -> str:
 
     return f"Sukses! Project '{clean_project_name}' berhasil dihapus sepenuhnya ({', '.join(deleted_items)})."
 
+
+if __name__ == "__main__":
+    mcp.run(transport="sse", host="0.0.0.0", port=8000)
