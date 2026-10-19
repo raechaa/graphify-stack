@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 mcp = FastMCP("graphify")
 
