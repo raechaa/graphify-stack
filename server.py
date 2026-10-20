@@ -133,46 +133,52 @@ def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
         available_commands = help_result.stdout + help_result.stderr
         
         # Try different Graphify scan commands based on version
-        scan_commands = []
-        
+        #scan_commands = []
+        # Replace the scan_commands section with:
+        scan_commands = [
+            ["graphify", "extract", str(repo_path), "--out", str(graph_dir), "--code-only"],
+            ["graphify", "extract", str(repo_path), "--output", str(graph_dir), "--code-only"],
+            ["graphify", "extract", str(repo_path), "--out", str(graph_dir)],
+            ["graphify", "extract", str(repo_path), "--output", str(graph_dir)],
+        ]
         # Check if 'scan' command exists
-        if "scan" in available_commands:
-            scan_commands = [
-                ["graphify", "scan", str(repo_path), "--output", str(graph_dir)],
-                ["graphify", "scan", str(repo_path), "--output", str(graph_dir / "graph.json")],
-                ["graphify", "scan", str(repo_path), "-o", str(graph_dir)],
-                ["graphify", "scan", str(repo_path), "--output-dir", str(graph_dir)],
-            ]
+        #if "scan" in available_commands:
+        #    scan_commands = [
+        #        ["graphify", "scan", str(repo_path), "--output", str(graph_dir)],
+        #        ["graphify", "scan", str(repo_path), "--output", str(graph_dir / "graph.json")],
+        #        ["graphify", "scan", str(repo_path), "-o", str(graph_dir)],
+        #        ["graphify", "scan", str(repo_path), "--output-dir", str(graph_dir)],
+        #    ]
         # Try 'index' command
-        elif "index" in available_commands:
-            scan_commands = [
-                ["graphify", "index", str(repo_path), "--output", str(graph_dir)],
-                ["graphify", "index", str(repo_path), "-o", str(graph_dir)],
-                ["graphify", "index", str(repo_path), "--output-dir", str(graph_dir)],
-            ]
+        #elif "index" in available_commands:
+        #    scan_commands = [
+        #       ["graphify", "index", str(repo_path), "--output", str(graph_dir)],
+        #        ["graphify", "index", str(repo_path), "-o", str(graph_dir)],
+        #        ["graphify", "index", str(repo_path), "--output-dir", str(graph_dir)],
+        #    ]
         # Try 'build' command
-        elif "build" in available_commands:
-            scan_commands = [
-                ["graphify", "build", str(repo_path), "--output", str(graph_dir)],
-                ["graphify", "build", str(repo_path), "-o", str(graph_dir)],
-            ]
+        #elif "build" in available_commands:
+        #    scan_commands = [
+        #        ["graphify", "build", str(repo_path), "--output", str(graph_dir)],
+        #        ["graphify", "build", str(repo_path), "-o", str(graph_dir)],
+        #    ]
         # Try 'analyze' command
-        elif "analyze" in available_commands:
-            scan_commands = [
-                ["graphify", "analyze", str(repo_path), "--output", str(graph_dir)],
-                ["graphify", "analyze", str(repo_path), "-o", str(graph_dir)],
-            ]
+        #elif "analyze" in available_commands:
+        #    scan_commands = [
+        #       ["graphify", "analyze", str(repo_path), "--output", str(graph_dir)],
+        #        ["graphify", "analyze", str(repo_path), "-o", str(graph_dir)],
+        #    ]
         # Try 'create-graph' command
-        elif "create-graph" in available_commands:
-            scan_commands = [
-                ["graphify", "create-graph", str(repo_path), "--output", str(graph_dir)],
-                ["graphify", "create-graph", str(repo_path), "-o", str(graph_dir)],
-            ]
-        else:
-            return (
-                f"Error: Could not determine Graphify command. Available commands:\n"
-                f"{available_commands}"
-            )
+        #elif "create-graph" in available_commands:
+        #    scan_commands = [
+        #        ["graphify", "create-graph", str(repo_path), "--output", str(graph_dir)],
+        #        ["graphify", "create-graph", str(repo_path), "-o", str(graph_dir)],
+        #    ]
+        #else:
+        #    return (
+        #        f"Error: Could not determine Graphify command. Available commands:\n"
+        #        f"{available_commands}"
+        #    )
 
         scan_success = False
         last_error = ""
