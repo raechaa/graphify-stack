@@ -1,6 +1,8 @@
 import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
+import json
+import shutil
 
 from fastmcp import FastMCP
 
@@ -11,7 +13,7 @@ GRAPHS_DIR = Path("/data/graphs")
 
 
 def find_graph_json(project_name: str) -> Path | None:
-    """Find the Graphify graph.json belonging to a project."""
+    """Find the Graphify graph.json belonging to a project with better search."""
     if not project_name or Path(project_name).name != project_name:
         raise ValueError("Invalid project name.")
 
@@ -22,27 +24,48 @@ def find_graph_json(project_name: str) -> Path | None:
     if not project_graph_dir.is_dir():
         return None
 
-    # Search nested output directories because Graphify output layout
-    # can differ by CLI version/configuration.
-    candidates = sorted(
-        (
-            p for p in project_graph_dir.rglob("graph.json")
-            if p.is_file()
-        ),
-        key=lambda p: (len(p.parts), str(p)),
-    )
+    # Multiple search strategies
+    candidates = []
+    
+    # Strategy 1: Direct graph.json in project dir
+    direct = project_graph_dir / "graph.json"
+    if direct.is_file():
+        candidates.append(direct)
+    
+    # Strategy 2: Recursive search with multiple patterns
+    patterns = ["graph.json", "*.graph.json", "graphify_output/graph.json"]
+    for pattern in patterns:
+        candidates.extend(
+            p for p in project_graph_dir.rglob(pattern) if p.is_file()
+        )
+    
+    # Strategy 3: Check for any JSON file that looks like a graph
+    if not candidates:
+        for json_file in project_graph_dir.rglob("*.json"):
+            try:
+                with open(json_file, 'r') as f:
+                    data = json.load(f)
+                    # Check if it looks like a graph structure
+                    if 'nodes' in data or 'edges' in data or 'graph' in data:
+                        candidates.append(json_file)
+            except:
+                continue
+    
+    # Sort by depth (prefer shallow paths) and name
+    candidates.sort(key=lambda p: (len(p.parts), str(p)))
     return candidates[0].resolve() if candidates else None
 
 
 def run_command(args: list[str], cwd: Path | None = None):
     """Run a command without a shell and capture diagnostics."""
-    return subprocess.run(
+    result = subprocess.run(
         args,
         cwd=str(cwd) if cwd else None,
         capture_output=True,
         text=True,
-        check=True,
+        check=False  # Don't raise immediately, handle errors manually
     )
+    return result
 
 
 @mcp.tool()
@@ -69,11 +92,14 @@ def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
         return "Error: Graph path is outside GRAPHS_DIR."
 
     try:
+        # Clone or update repository
         if not repo_path.exists():
-            run_command([
+            result = run_command([
                 "git", "clone", "--depth", "1",
                 "-b", branch, repo_url, str(repo_path),
             ])
+            if result.returncode != 0:
+                return f"Error cloning repository: {result.stderr}"
         else:
             if not (repo_path / ".git").exists():
                 return (
@@ -81,30 +107,70 @@ def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
                     "Move/rename it or choose a different project directory."
                 )
 
-            run_command(["git", "fetch", "origin"], cwd=repo_path)
-            run_command(["git", "checkout", branch], cwd=repo_path)
-            run_command(
+            result = run_command(["git", "fetch", "origin"], cwd=repo_path)
+            if result.returncode != 0:
+                return f"Error fetching: {result.stderr}"
+            
+            result = run_command(["git", "checkout", branch], cwd=repo_path)
+            if result.returncode != 0:
+                return f"Error checkout: {result.stderr}"
+            
+            result = run_command(
                 ["git", "pull", "--ff-only", "origin", branch],
                 cwd=repo_path,
             )
+            if result.returncode != 0:
+                return f"Error pulling: {result.stderr}"
 
+        # Clean previous graph output
+        if graph_dir.exists():
+            shutil.rmtree(graph_dir)
         graph_dir.mkdir(parents=True, exist_ok=True)
 
-        # NOTE: Verify `graphify scan --help` for your installed Graphify
-        # version. If --output expects a file rather than a directory,
-        # adjust this command to that version's documented syntax.
-        run_command([
-            "graphify", "scan", str(repo_path),
-            "--output", str(graph_dir),
-        ])
+        # Try different Graphify scan commands
+        scan_commands = [
+            # Try with output as directory
+            ["graphify", "scan", str(repo_path), "--output", str(graph_dir)],
+            # Try with output as file
+            ["graphify", "scan", str(repo_path), "--output", str(graph_dir / "graph.json")],
+            # Try with different flag names
+            ["graphify", "scan", str(repo_path), "-o", str(graph_dir)],
+            ["graphify", "scan", str(repo_path), "--output-dir", str(graph_dir)],
+        ]
 
+        scan_success = False
+        last_error = ""
+        
+        for cmd in scan_commands:
+            result = run_command(cmd)
+            if result.returncode == 0:
+                scan_success = True
+                break
+            else:
+                last_error = result.stderr or result.stdout
+
+        if not scan_success:
+            return (
+                f"Graphify scan failed. Last error: {last_error}\n"
+                f"Tried commands: {scan_commands}\n"
+                "Please check Graphify installation and syntax."
+            )
+
+        # Verify graph was created
         graph_path = find_graph_json(repo_name)
         if graph_path is None:
+            # List what was actually created
+            created_files = []
+            if graph_dir.exists():
+                for f in graph_dir.rglob("*"):
+                    if f.is_file():
+                        created_files.append(str(f))
+            
             return (
                 "Scan command completed, but graph.json was not found.\n"
                 f"Project output directory: {graph_dir}\n"
-                "Inspect the Graphify output and run `graphify scan --help` "
-                "to confirm the supported --output syntax."
+                f"Files created: {created_files if created_files else 'None'}\n"
+                "Please check Graphify output format."
             )
 
         return (
@@ -113,12 +179,6 @@ def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
             f"Graph JSON: {graph_path}"
         )
 
-    except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or exc.stdout or str(exc)).strip()
-        return (
-            f"Command failed (exit code {exc.returncode}): {exc.cmd}\n"
-            f"{detail}"
-        )
     except Exception as exc:
         return f"Error: {type(exc).__name__}: {exc}"
 
@@ -139,8 +199,16 @@ def query_project_graph(
     try:
         graph_path = find_graph_json(project_name)
         if graph_path is None:
+            # Debug: show what's in the graphs directory
+            debug_info = []
+            project_dir = GRAPHS_DIR / project_name
+            if project_dir.exists():
+                for f in project_dir.rglob("*"):
+                    debug_info.append(str(f))
+            
             return (
-                f"Error: graph.json for project '{project_name}' was not found. "
+                f"Error: graph.json for project '{project_name}' was not found.\n"
+                f"Project directory contents: {debug_info if debug_info else 'Empty'}\n"
                 "Run sync_and_scan_repository first."
             )
 
@@ -167,12 +235,28 @@ def query_project_graph(
                 "architecture, query."
             )
 
-        # Confirm the exact query syntax with `graphify query --help`
-        # for the installed Graphify version.
-        result = run_command([
-            "graphify", "query", question,
-            "--graph", str(graph_path),
-        ])
+        # Try different query command formats
+        query_commands = [
+            ["graphify", "query", question, "--graph", str(graph_path)],
+            ["graphify", "query", "--graph", str(graph_path), question],
+            ["graphify", "query", question, "-g", str(graph_path)],
+        ]
+
+        result = None
+        last_error = ""
+        
+        for cmd in query_commands:
+            result = run_command(cmd)
+            if result.returncode == 0:
+                break
+            else:
+                last_error = result.stderr or result.stdout
+
+        if result is None or result.returncode != 0:
+            return (
+                f"Graphify query failed. Error: {last_error}\n"
+                f"Graph file exists at: {graph_path}"
+            )
 
         output = result.stdout.strip()
         if not output:
@@ -184,18 +268,30 @@ def query_project_graph(
             f"{output}"
         )
 
-    except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or exc.stdout or str(exc)).strip()
-        return (
-            f"Graphify query failed (exit code {exc.returncode}).\n"
-            f"{detail}"
-        )
     except Exception as exc:
         return f"Error: {type(exc).__name__}: {exc}"
 
 
+@mcp.tool()
+def list_projects() -> str:
+    """List all projects that have been scanned."""
+    if not GRAPHS_DIR.exists():
+        return "No projects have been scanned yet."
+    
+    projects = []
+    for project_dir in GRAPHS_DIR.iterdir():
+        if project_dir.is_dir():
+            graph = find_graph_json(project_dir.name)
+            if graph:
+                projects.append(f"- {project_dir.name}: {graph}")
+            else:
+                projects.append(f"- {project_dir.name}: (no graph.json found)")
+    
+    return "\n".join(projects) if projects else "No projects with valid graphs found."
+
+
 if __name__ == "__main__":
-        mcp.run(
+    mcp.run(
         transport="sse", 
         host="0.0.0.0", 
         port=8000
