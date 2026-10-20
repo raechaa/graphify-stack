@@ -32,20 +32,22 @@ def find_graph_json(project_name: str) -> Path | None:
     if direct.is_file():
         candidates.append(direct)
     
-    # Strategy 2: Recursive search with multiple patterns
-    patterns = ["graph.json", "*.graph.json", "graphify_output/graph.json"]
-    for pattern in patterns:
-        candidates.extend(
-            p for p in project_graph_dir.rglob(pattern) if p.is_file()
-        )
+    # Strategy 2: Recursive search for graph.json files
+    for graph_file in project_graph_dir.rglob("graph.json"):
+        if graph_file.is_file():
+            candidates.append(graph_file)
     
-    # Strategy 3: Check for any JSON file that looks like a graph
+    # Strategy 3: Look for graphify-out directory
+    graphify_out = project_graph_dir / "graphify-out" / "graph.json"
+    if graphify_out.is_file():
+        candidates.append(graphify_out)
+    
+    # Strategy 4: Check for any JSON file that looks like a graph
     if not candidates:
         for json_file in project_graph_dir.rglob("*.json"):
             try:
                 with open(json_file, 'r') as f:
                     data = json.load(f)
-                    # Check if it looks like a graph structure
                     if 'nodes' in data or 'edges' in data or 'graph' in data:
                         candidates.append(json_file)
             except:
@@ -54,18 +56,6 @@ def find_graph_json(project_name: str) -> Path | None:
     # Sort by depth (prefer shallow paths) and name
     candidates.sort(key=lambda p: (len(p.parts), str(p)))
     return candidates[0].resolve() if candidates else None
-
-
-def run_command(args: list[str], cwd: Path | None = None):
-    """Run a command without a shell and capture diagnostics."""
-    result = subprocess.run(
-        args,
-        cwd=str(cwd) if cwd else None,
-        capture_output=True,
-        text=True,
-        check=False  # Don't raise immediately, handle errors manually
-    )
-    return result
 
 
 @mcp.tool()
