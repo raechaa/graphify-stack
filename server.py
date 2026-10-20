@@ -128,16 +128,51 @@ def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
             shutil.rmtree(graph_dir)
         graph_dir.mkdir(parents=True, exist_ok=True)
 
-        # Try different Graphify scan commands
-        scan_commands = [
-            # Try with output as directory
-            ["graphify", "scan", str(repo_path), "--output", str(graph_dir)],
-            # Try with output as file
-            ["graphify", "scan", str(repo_path), "--output", str(graph_dir / "graph.json")],
-            # Try with different flag names
-            ["graphify", "scan", str(repo_path), "-o", str(graph_dir)],
-            ["graphify", "scan", str(repo_path), "--output-dir", str(graph_dir)],
-        ]
+        # First, check what commands are available
+        help_result = run_command(["graphify", "--help"])
+        available_commands = help_result.stdout + help_result.stderr
+        
+        # Try different Graphify scan commands based on version
+        scan_commands = []
+        
+        # Check if 'scan' command exists
+        if "scan" in available_commands:
+            scan_commands = [
+                ["graphify", "scan", str(repo_path), "--output", str(graph_dir)],
+                ["graphify", "scan", str(repo_path), "--output", str(graph_dir / "graph.json")],
+                ["graphify", "scan", str(repo_path), "-o", str(graph_dir)],
+                ["graphify", "scan", str(repo_path), "--output-dir", str(graph_dir)],
+            ]
+        # Try 'index' command
+        elif "index" in available_commands:
+            scan_commands = [
+                ["graphify", "index", str(repo_path), "--output", str(graph_dir)],
+                ["graphify", "index", str(repo_path), "-o", str(graph_dir)],
+                ["graphify", "index", str(repo_path), "--output-dir", str(graph_dir)],
+            ]
+        # Try 'build' command
+        elif "build" in available_commands:
+            scan_commands = [
+                ["graphify", "build", str(repo_path), "--output", str(graph_dir)],
+                ["graphify", "build", str(repo_path), "-o", str(graph_dir)],
+            ]
+        # Try 'analyze' command
+        elif "analyze" in available_commands:
+            scan_commands = [
+                ["graphify", "analyze", str(repo_path), "--output", str(graph_dir)],
+                ["graphify", "analyze", str(repo_path), "-o", str(graph_dir)],
+            ]
+        # Try 'create-graph' command
+        elif "create-graph" in available_commands:
+            scan_commands = [
+                ["graphify", "create-graph", str(repo_path), "--output", str(graph_dir)],
+                ["graphify", "create-graph", str(repo_path), "-o", str(graph_dir)],
+            ]
+        else:
+            return (
+                f"Error: Could not determine Graphify command. Available commands:\n"
+                f"{available_commands}"
+            )
 
         scan_success = False
         last_error = ""
@@ -154,7 +189,7 @@ def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
             return (
                 f"Graphify scan failed. Last error: {last_error}\n"
                 f"Tried commands: {scan_commands}\n"
-                "Please check Graphify installation and syntax."
+                f"Available Graphify commands: {available_commands}"
             )
 
         # Verify graph was created
