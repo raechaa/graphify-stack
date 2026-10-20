@@ -3,6 +3,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 import json
 import shutil
+import subprocess
 
 from fastmcp import FastMCP
 
@@ -57,6 +58,16 @@ def find_graph_json(project_name: str) -> Path | None:
     candidates.sort(key=lambda p: (len(p.parts), str(p)))
     return candidates[0].resolve() if candidates else None
 
+def run_command(args: list[str], cwd: Path | None = None):
+    """Run a command without a shell and capture diagnostics."""
+    result = subprocess.run(
+        args,
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+        check=False  # Don't raise immediately, handle errors manually
+    )
+    return result
 
 @mcp.tool()
 def sync_and_scan_repository(repo_url: str, branch: str = "main") -> str:
